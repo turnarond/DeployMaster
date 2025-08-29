@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using Telnet;
 
 namespace SimpleFTP
 {
@@ -77,6 +78,8 @@ namespace SimpleFTP
             string localFile = txt_fileToUpload.Text;
             string user = txt_user.Text;
             string pass = txt_pass.Password;
+            // ✅ 判断是否需要重启
+            bool shouldReboot = chk_rebootAfterDeploy.IsChecked == true;
             string remotePath = txt_remotePath.Text?.TrimEnd('/') + "/";
 
             // 获取 IP 列表
@@ -110,7 +113,7 @@ namespace SimpleFTP
 
             string ipSummary = string.Join(", ", ips);
             // 使用 Task.Run 避免阻塞 UI
-            await Task.Run(() =>
+            await Task.Run(async () =>
             {
                 var successes = new List<string>();
                 var failures = new List<string>();
@@ -127,6 +130,33 @@ namespace SimpleFTP
                         string result = ConnectionManager.FtpUpload(fullUri, user, pass, localFile);
                         successes.Add(targetIp);
                         Dispatcher.Invoke(() => AppendLog($"✅ 成功: {targetIp}"));
+
+                        // ---2.如果勾选了重启，则执行 Telnet 重启-- -
+                        if (shouldReboot)
+                        {
+                            Dispatcher.Invoke(() => AppendLog($"🔄 正在通过 Telnet 重启 {targetIp} ..."));
+
+                            // ✅ 创建 TelnetManager 实例
+                            var telnet = new TelnetClient();
+
+                            // 可选：监听日志
+                            telnet.OnLogReceived += log => Console.WriteLine($"[Telnet] {log}");
+
+                            // 连接
+                            bool success = await telnet.ConnectAsync(ip, 23, user, pass);
+
+                            if (success)
+                            {
+                                // 发送 reboot
+                                await telnet.SendLineAsync("reboot");
+                                // 立即断开（设备会重启）
+                                await telnet.DisconnectAsync();
+                            }
+                            else
+                            {
+                                Console.WriteLine("连接失败");
+                            }
+                        }
                     }
                     catch (Exception ex)
                     {

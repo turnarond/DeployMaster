@@ -51,6 +51,13 @@
                 <TextBlock Text="远程路径：" Grid.Row="1" Grid.Column="0" Margin="5"/>
                 <TextBox x:Name="txt_remotePath" Grid.Row="1" Grid.Column="1" Text="/apps/" Margin="5" VerticalContentAlignment="Center"/>
 
+                <CheckBox x:Name="chk_rebootAfterDeploy" 
+                  Content="部署后重启设备" 
+                  Grid.Row="1" Grid.Column="2" 
+                  Grid.ColumnSpan="2"
+                  VerticalAlignment="Center" 
+                  Margin="10,5,5,5"
+                  IsChecked="False"/>
             </Grid>
         </GroupBox>
 
