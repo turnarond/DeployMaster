@@ -11,7 +11,7 @@ using System.Windows.Controls;
 using System.Windows.Threading;
 using Telnet;
 
-namespace SimpleFTP
+namespace DeployMaster
 {
     /// <summary>
     /// 主窗口：支持批量 FTP 部署
