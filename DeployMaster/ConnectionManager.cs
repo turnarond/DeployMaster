@@ -69,14 +69,13 @@ namespace DeployMaster
         {
             try
             {
-                Uri serverUri = new Uri(uri.TrimEnd('/') + "/" + Path.GetFileName(filePath));
                 FileInfo fileInfo = new FileInfo(filePath);
                 long fileSize = fileInfo.Length;
 
                 if (fileSize == 0)
                     throw new IOException("文件为空");
 
-                FtpWebRequest request = (FtpWebRequest)WebRequest.Create(serverUri);
+                FtpWebRequest request = (FtpWebRequest)WebRequest.Create(uri);
                 request.Method = WebRequestMethods.Ftp.UploadFile;
                 request.Credentials = new NetworkCredential(userName, password);
                 request.UseBinary = true;
@@ -203,6 +202,107 @@ namespace DeployMaster
             else if (MainWindow.mainWindow != null)
             {
                 MainWindow.mainWindow.AppendLog(message);
+            }
+        }
+
+        /// <summary>
+        /// 确保远程 FTP 路径上的所有目录都存在（递归创建）
+        /// </summary>
+        /// <param name="directoryUri">完整目录 URI，如 ftp://192.168.1.100/app/config/logs/</param>
+        /// <param name="userName">用户名</param>
+        /// <param name="password">密码</param>
+        /// <returns>是否成功</returns>
+        public static bool FtpEnsureDirectory(string directoryUri, string userName, string password)
+        {
+            try
+            {
+                Uri uri = new Uri(directoryUri.TrimEnd('/') + "/"); // 确保以 / 结尾
+                string host = uri.GetLeftPart(UriPartial.Authority); // ftp://192.168.1.100
+                string path = uri.AbsolutePath.Substring(1); // 去掉开头的 "/" => app/config/logs/
+
+                string[] segments = path.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                StringBuilder currentPath = new StringBuilder();
+
+                foreach (string segment in segments)
+                {
+                    currentPath.Append(segment).Append("/");
+                    string currentUri = host + "/" + currentPath;
+
+                    if (!FtpDirectoryExists(currentUri, userName, password))
+                    {
+                        if (!FtpCreateDirectory(currentUri, userName, password))
+                        {
+                            MainWindow.mainWindow?.AppendLog($"❌ 创建目录失败: {currentUri}");
+                            return false;
+                        }
+                        MainWindow.mainWindow?.AppendLog($"📁 创建目录: {currentUri}");
+                    }
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                MainWindow.mainWindow?.AppendLog($"❌ 确保目录时出错: {ex.Message}");
+                return false;
+            }
+        }
+
+        private static bool FtpDirectoryExists(string directoryUri, string userName, string password)
+        {
+            try
+            {
+                FtpWebRequest request = (FtpWebRequest)WebRequest.Create(directoryUri);
+                request.Method = WebRequestMethods.Ftp.ListDirectoryDetails; 
+                request.Credentials = new NetworkCredential(userName, password);
+                request.UsePassive = true;
+                request.UseBinary = true;
+                request.KeepAlive = true;
+                request.Timeout = 5000;
+                request.ReadWriteTimeout = 5000;
+
+                using (FtpWebResponse response = (FtpWebResponse)request.GetResponse())
+                {
+                    // 如果能列出目录内容，说明目录存在
+                    return true;
+                }
+            }
+            catch (WebException ex)
+            {
+                if (ex.Response is FtpWebResponse response)
+                {
+                    // 550: No such file or directory
+                    // 501: Syntax error in parameters (路径格式错)
+                    return response.StatusCode != FtpStatusCode.ActionNotTakenFileUnavailable &&
+                           response.StatusCode != FtpStatusCode.ArgumentSyntaxError;
+                }
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool FtpCreateDirectory(string directoryUri, string userName, string password)
+        {
+            try
+            {
+                FtpWebRequest request = (FtpWebRequest)WebRequest.Create(directoryUri);
+                request.Method = WebRequestMethods.Ftp.MakeDirectory;
+                request.Credentials = new NetworkCredential(userName, password);
+                request.UsePassive = true;
+                request.UseBinary = true;
+
+                using (FtpWebResponse response = (FtpWebResponse)request.GetResponse())
+                {
+                    return response.StatusCode == FtpStatusCode.PathnameCreated;
+                }
+            }
+            catch (Exception ex)
+            {
+                MainWindow.mainWindow?.AppendLog($"❌ 创建目录异常: {directoryUri} -> {ex.Message}");
+                return false;
             }
         }
 

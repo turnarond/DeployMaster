@@ -18,14 +18,51 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- 1. 本地文件选择 -->
-        <GroupBox Grid.Row="0" Header="本地文件" FontWeight="Bold" Margin="0,0,0,10">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="文件路径：" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                <TextBox x:Name="txt_fileToUpload" Width="400" IsReadOnly="True" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                <Button x:Name="Btn_fileBrowse" Content="选择文件..." Click="Btn_fileBrowse_Click" 
-                        Width="100" Height="25" VerticalAlignment="Center"/>
-            </StackPanel>
+        <!-- 1. 上传区域（拖拽区） -->
+        <GroupBox Grid.Row="0" Header="上传内容（支持拖拽）" FontWeight="Bold" Margin="0,0,0,10">
+            <Border Background="#F5F5F5" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- 拖拽提示 -->
+                    <TextBlock x:Name="txt_dragHint" Grid.Row="0" Text="点击“添加”或拖拽文件/文件夹到这里" 
+                       HorizontalAlignment="Center" VerticalAlignment="Center" 
+                       Foreground="Gray" FontStyle="Italic" Margin="10" 
+                       Visibility="Visible"/>
+
+                    <!-- 文件列表 -->
+                    <ListBox x:Name="list_uploadedItems" Grid.Row="1" 
+                     SelectionMode="Extended" 
+                     AllowDrop="True" 
+                     Drop="List_uploadedItems_Drop"
+                     DragOver="List_uploadedItems_DragOver"
+                     KeyUp="List_uploadedItems_KeyUp"
+                     Height="120"
+                     BorderThickness="0">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" ToolTip="{Binding FullPath}">
+                                    <Image Source="{Binding Icon}" Width="16" Height="16" Margin="0,0,5,0"/>
+                                    <TextBlock Text="{Binding DisplayName}" />
+                                    <TextBlock Text=" (文件夹)" Foreground="Blue" FontStyle="Italic" 
+                                       Visibility="{Binding IsFolder, Converter={StaticResource BoolToVisibilityConverter}}" 
+                                       Margin="5,0,0,0"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <!-- 操作按钮 -->
+                    <StackPanel Grid.Row="0" HorizontalAlignment="Right" Orientation="Horizontal" Margin="0,5">
+                        <Button Content="添加文件..." Click="Btn_AddFiles_Click" Width="90" Height="22" Margin="0,0,5,0"/>
+                        <Button Content="添加文件夹..." Click="Btn_AddFolders_Click" Width="90" Height="22"/>
+                        <Button Content="清空" Click="Btn_ClearList_Click" Width="60" Height="22"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
         </GroupBox>
 
         <!-- 2. FTP 设置 -->

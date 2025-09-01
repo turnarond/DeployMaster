@@ -4,6 +4,7 @@
              xmlns:local="clr-namespace:SimpleFTP"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-         
+        <!-- 声明 BooleanToVisibilityConverter 为全局资源 -->
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
     </Application.Resources>
 </Application>
