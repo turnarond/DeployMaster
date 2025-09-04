@@ -25,6 +25,8 @@ namespace DeployMaster
         public static MainWindow mainWindow;
 
         private ObservableCollection<UploadItem> _uploadItems;
+        private Dictionary<string, ObservableCollection<FtpRemoteItem>> _cachedFileTrees = new Dictionary<string, ObservableCollection<FtpRemoteItem>>();
+        private List<string> _targetIPs = new List<string>();
         public MainWindow()
         {
             InitializeComponent();
@@ -33,6 +35,9 @@ namespace DeployMaster
             // 初始化上传列表
             _uploadItems = new ObservableCollection<UploadItem>();
             list_uploadedItems.ItemsSource = _uploadItems;
+
+            // 初始化 cmb_targetIPs 数据
+            Txt_ipList_TextChanged(null, null); // 触发初始填充
         }
 
         /// <summary>
@@ -62,52 +67,9 @@ namespace DeployMaster
             }, DispatcherPriority.ApplicationIdle);
         }
 
-        private async Task UploadFileToAllDevices(
-            string filePath,
-            string user, string pass,
-            string remoteBasePath,
-            string[] ips,
-            bool shouldReboot)
-        {
-            var successes = new List<string>();
-            var failures = new List<string>();
-
-            string fileName = Path.GetFileName(filePath);
-            AppendLog($"📤 开始部署文件: {fileName}");
-
-            foreach (string ip in ips)
-            {
-                string targetIp = ip.Trim();
-                string uri = $"ftp://{targetIp}{(targetIp.Contains(":") ? "" : ":21")}{remoteBasePath}{fileName}";
-
-                try
-                {
-                    Dispatcher.Invoke(() => AppendLog($"➡️ 上传到 {targetIp}..."));
-                    string result = ConnectionManager.FtpUpload(uri, user, pass, filePath);
-                    successes.Add(targetIp);
-                    Dispatcher.Invoke(() => AppendLog($"✅ 成功: {targetIp}"));
-                }
-                catch (Exception ex)
-                {
-                    string msg = ex.Message.Length > 100 ? ex.Message.Substring(0, 100) + "..." : ex.Message;
-                    failures.Add($"{targetIp}({msg})");
-                    Dispatcher.Invoke(() => AppendLog($"❌ 失败: {targetIp} - {ex.Message}"));
-                }
-
-                await Task.Delay(100); // 避免太快
-            }
-
-            Dispatcher.Invoke(() =>
-            {
-                AppendLog($"📊 文件 '{fileName}' 部署完成：成功 {successes.Count} | 失败 {failures.Count}");
-                if (failures.Any()) AppendLog($"❌ 失败列表: {string.Join(", ", failures)}");
-            });
-        }
-
         /// <summary>
         /// 开始批量部署
         /// </summary>
-
         private async void Btn_deploy_Click(object sender, RoutedEventArgs e)
         {
             string user = txt_user.Text;
@@ -146,8 +108,10 @@ namespace DeployMaster
 
             await Task.Run(async () =>
             {
-                var successes = new List<string>();
-                var failures = new List<string>();
+                var delopy_successes = new List<string>();
+                var deploy_failures = new List<string>();
+                var reboot_successes = new List<string>();
+                var reboot_failures = new List<string>();
 
                 // ✅ 外层：遍历每台设备（这才是合理的顺序！）
                 foreach (string ip in ips)
@@ -196,17 +160,19 @@ namespace DeployMaster
                     // ✅ 所有内容上传成功后，才执行重启
                     if (allSuccess)
                     {
-                        successes.Add(targetIp);
+                        delopy_successes.Add(targetIp);
 
                         if (shouldReboot)
                         {
                             try
                             {
                                 await RebootDevice(targetIp, user, pass);
+                                reboot_successes.Add(targetIp);
                                 AppendLog($"🔄 已发送重启命令: {targetIp}");
                             }
                             catch (Exception ex)
                             {
+                                reboot_failures.Add(targetIp);
                                 AppendLog($"⚠️ 重启失败: {targetIp} - {ex.Message}");
                                 // 重启失败不计入部署失败
                             }
@@ -214,7 +180,7 @@ namespace DeployMaster
                     }
                     else
                     {
-                        failures.Add(targetIp);
+                        deploy_failures.Add(targetIp);
                     }
 
                     await Task.Delay(100); // 设备间延迟
@@ -224,8 +190,13 @@ namespace DeployMaster
                 Dispatcher.Invoke(() =>
                 {
                     AppendLog($"🎉 批量部署完成！");
-                    AppendLog($"📊 成功: {successes.Count} | 失败: {failures.Count}");
-                    if (failures.Any()) AppendLog($"❌ 失败列表: {string.Join(", ", failures)}");
+                    AppendLog($"📊 部署成功: {delopy_successes.Count} | 部署失败: {deploy_failures.Count}");
+                    if (deploy_failures.Any()) AppendLog($"❌ 失败列表: {string.Join(", ", deploy_failures)}");
+                    if (shouldReboot)
+                    {
+                        AppendLog($"📊 重启成功: {reboot_successes.Count} | 重启失败: {reboot_failures.Count}");
+                        if (deploy_failures.Any()) AppendLog($"❌ 失败列表: {string.Join(", ", reboot_failures)}");
+                    }
                     Btn_deploy.IsEnabled = true;
                 });
             });
@@ -238,6 +209,70 @@ namespace DeployMaster
         {
             txt_log.Text = "";
             AppendLog("🗑️ 日志已清除");
+        }
+
+        private async void Btn_RefreshRemote_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string user = txt_user.Text;
+                string pass = txt_pass.Password;
+                string remotePath = txt_remotePath.Text?.TrimEnd('/') + "/";
+                string[] ips = txt_ipList.Text
+                    .Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToArray();
+
+                if (ips.Length == 0)
+                {
+                    AppendLog("❌ 请先输入至少一个目标 IP！");
+                    return;
+                }
+
+                string selectedIp = cmb_targetIPs.SelectedItem?.ToString();
+                if (string.IsNullOrEmpty(selectedIp))
+                {
+                    selectedIp = ips.FirstOrDefault();
+                }
+                string uri = $"ftp://{selectedIp}:21{remotePath}";
+
+                AppendLog($"🔍 正在获取 {selectedIp} 的远端目录: {remotePath}");
+
+                // 异步获取
+                var items = await Task.Run(() => ConnectionManager.FtpList(uri, user, pass));
+
+                // 构建树结构
+                var root = new FtpRemoteItem
+                {
+                    Name = remotePath.Split('/').LastOrDefault() ?? "/",
+                    FullName = uri,
+                    IsDirectory = true
+                };
+
+                foreach (var item in items)
+                {
+                    root.Children.Add(new FtpRemoteItem
+                    {
+                        Name = item.Name,
+                        FullName = item.FullName,
+                        IsDirectory = item.IsDirectory,
+                        Size = item.Size,
+                        ModifiedDate = item.ModifiedDate
+                    });
+                }
+
+                // 在 Btn_RefreshRemote_Click 中，刷新前设置标题
+                group_remoteFiles.Header = $"📁 {remotePath}"; // 可加图标
+                // 绑定到 UI
+                tree_remoteFiles.ItemsSource = new ObservableCollection<FtpRemoteItem> { root };
+
+                AppendLog($"✅ 获取远端文件成功，共 {root.Children.Count} 项");
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"❌ 获取远端文件失败: {ex.Message}");
+            }
         }
 
         private async Task RebootDevice(string ip, string user, string pass)
@@ -262,7 +297,7 @@ namespace DeployMaster
             }
             else
             {
-                Console.WriteLine("连接失败");
+                AppendLog($"⚠️ Telnet 连接失败: {ip}");
             }
         }
 
@@ -272,11 +307,14 @@ namespace DeployMaster
             string folderName = root.Name;
             string remoteRoot = baseFtpUri + folderName + "/";
 
-            // 确保远程根目录存在
-            await Task.Run(() => ConnectionManager.FtpEnsureDirectory(remoteRoot, user, pass));
+            await Task.Run(() =>
+            {
+                // 确保远程根目录存在
+                ConnectionManager.FtpEnsureDirectory(remoteRoot, user, pass);
 
-            // 递归上传
-            await Task.Run(() => UploadDirectoryRecursive(root, remoteRoot, user, pass));
+                // 递归上传
+                UploadDirectoryRecursive(root, remoteRoot, user, pass);
+            });
         }
 
         private void UploadDirectoryRecursive(DirectoryInfo localDir, string remoteBaseUri, string user, string pass)
@@ -412,68 +450,45 @@ namespace DeployMaster
             _uploadItems.Clear();
             UpdateDragHintVisibility();
         }
-        // ========================
-        // 可选：保留原有功能
-        // ========================
 
-        // 如果你还想保留“连接服务器浏览文件”功能
-        // 可以保留 Btn_connect_Click 和下载功能
-        // 或者注释掉它们
-
-        /*
-        private void Btn_connect_Click(object sender, RoutedEventArgs e)
+        private void Cmb_targetIPs_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            Uri uri = ParseUrlForFTP(txt_server.Text, txt_port.Text);
-            connProfile = new ConnectionProfile(uri, txt_user.Text, txt_pass.Password, txt_port.Text);
-            connMan = new ConnectionManager();
-            bool isConnected = connMan.ConnectToFTP(connProfile);
-
-            if (isConnected)
-            {
-                AppendLog("✅ 已连接，远程文件列表：");
-                StringBuilder sb = new StringBuilder();
-                sb.AppendLine(string.Format("{0,-30} {1,-15}", "文件名", "大小"));
-                foreach (var item in connMan.lines)
-                {
-                    sb.AppendLine(string.Format("{0,-30} {1,-15}", item.FileDisplayName, item.FileSize));
-                }
-                txt_remoteFileSystem.Text = sb.ToString();
-            }
-            else
-            {
-                AppendLog($"❌ 连接失败: {connMan.connResponse}");
-            }
+            string selected = cmb_targetIPs.SelectedItem?.ToString();
+            if (!string.IsNullOrEmpty(selected))
+                AppendLog($"📌 已选择目标设备：{selected}");
         }
 
-        private void Btn_Download_Click(object sender, RoutedEventArgs e)
+        // <summary>
+        /// 当 IP 列表文本变化时，更新下拉框的选项
+        /// </summary>
+        private void Txt_ipList_TextChanged(object sender, TextChangedEventArgs e)
         {
-            string fileName = txt_downloadFile.Text?.Trim();
-            if (string.IsNullOrEmpty(fileName)) return;
+            // 防止设计器中触发
+            if (!IsInitialized) return;
 
-            foreach (var line in connMan?.lines ?? new List<FtpListItem>())
+            var ips = txt_ipList.Text
+                .Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => x.Trim())
+                .Where(x => !string.IsNullOrEmpty(x))
+                .Distinct()
+                .ToArray();
+
+            // 保存当前选中项
+            string currentSelection = cmb_targetIPs.SelectedItem?.ToString();
+
+            // 更新 ComboBox 数据源
+            cmb_targetIPs.ItemsSource = ips;
+            cmb_targetIPs.Items.Refresh();
+
+            // 尝试恢复选择，若无效则选第一个
+            if (!string.IsNullOrEmpty(currentSelection) && ips.Contains(currentSelection))
             {
-                if (line.FileName.Equals(fileName))
-                {
-                    AppendLog($"📥 开始下载 {fileName}...");
-                    try
-                    {
-                        ConnectionManager.FtpDownload(
-                            connProfile.ConnUri.ToString(),
-                            connProfile.ConnUser,
-                            connProfile.ConnPass,
-                            fileName,
-                            Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-                            line.FileSize);
-                        AppendLog($"✅ 下载完成: {fileName}");
-                    }
-                    catch (Exception ex)
-                    {
-                        AppendLog($"❌ 下载失败: {ex.Message}");
-                    }
-                    break;
-                }
+                cmb_targetIPs.SelectedItem = currentSelection;
+            }
+            else if (ips.Length > 0)
+            {
+                cmb_targetIPs.SelectedIndex = 0;
             }
         }
-        */
     }
 }

@@ -92,6 +92,7 @@
     <Compile Include="ConnectionProfile.cs" />
     <Compile Include="ConnectionManager.cs" />
     <Compile Include="FileObject.cs" />
+    <Compile Include="FtpRemoteItem.cs" />
     <Compile Include="TelnetClient.cs" />
     <Compile Include="UploadItem.cs" />
   </ItemGroup>
@@ -142,6 +143,11 @@
       <ProductName>.NET Framework 3.5 SP1</ProductName>
       <Install>false</Install>
     </BootstrapperPackage>
+  </ItemGroup>
+  <ItemGroup />
+  <ItemGroup>
+    <Resource Include="Resources\FileIcon.png" />
+    <Resource Include="Resources\FolderIcon.png" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

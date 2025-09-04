@@ -6,5 +6,7 @@
     <Application.Resources>
         <!-- 声明 BooleanToVisibilityConverter 为全局资源 -->
         <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+        <BitmapImage x:Key="FolderIcon" UriSource="/Resources/FolderIcon.png" />
+        <BitmapImage x:Key="FileIcon" UriSource="/Resources/FileIcon.png" />
     </Application.Resources>
 </Application>

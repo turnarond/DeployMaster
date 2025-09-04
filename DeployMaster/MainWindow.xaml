@@ -4,52 +4,67 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="FTP 批量部署工具" Height="600" Width="800"
+        Title="FTP 批量部署工具" Height="700" Width="950"
         Background="#FFF0F0F0"
         FontFamily="Microsoft YaHei, Segoe UI">
 
     <Grid Margin="15">
+        <!-- 主列：左侧主操作区（70%），右侧预览（30%） -->
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="3*" />
+            <!-- 主操作区，占比大 -->
+            <ColumnDefinition Width="1*" />
+            <!-- 预览区，占比小 -->
+        </Grid.ColumnDefinitions>
+
+        <!-- 主行定义：更合理分配高度 -->
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <!-- 上传区 -->
             <RowDefinition Height="Auto"/>
+            <!-- FTP 设置 -->
             <RowDefinition Height="Auto"/>
+            <!-- IP 列表 -->
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
+            <!-- 操作按钮 -->
             <RowDefinition Height="*"/>
+            <!-- 日志输出（占剩余空间） -->
         </Grid.RowDefinitions>
 
-        <!-- 1. 上传区域（拖拽区） -->
-        <GroupBox Grid.Row="0" Header="上传内容（支持拖拽）" FontWeight="Bold" Margin="0,0,0,10">
+        <!-- ==================== 左侧：主操作区 ==================== -->
+
+        <!-- 1. 上传区域（支持拖拽） -->
+        <GroupBox Grid.Row="0" Grid.Column="0"
+                  Header="上传内容（支持拖拽）" FontWeight="Bold" Margin="0,0,0,10">
             <Border Background="#F5F5F5" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="100"/>
+                        <!-- 固定高度，可显示约6~8项 -->
                     </Grid.RowDefinitions>
 
                     <!-- 拖拽提示 -->
-                    <TextBlock x:Name="txt_dragHint" Grid.Row="0" Text="点击“添加”或拖拽文件/文件夹到这里" 
-                       HorizontalAlignment="Center" VerticalAlignment="Center" 
-                       Foreground="Gray" FontStyle="Italic" Margin="10" 
-                       Visibility="Visible"/>
+                    <TextBlock x:Name="txt_dragHint"
+                               Text="点击“添加”或拖拽文件/文件夹到这里"
+                               HorizontalAlignment="Left" VerticalAlignment="Center"
+                               Foreground="Gray" FontStyle="Italic" Margin="10"
+                               Visibility="Visible"/>
 
                     <!-- 文件列表 -->
-                    <ListBox x:Name="list_uploadedItems" Grid.Row="1" 
-                     SelectionMode="Extended" 
-                     AllowDrop="True" 
-                     Drop="List_uploadedItems_Drop"
-                     DragOver="List_uploadedItems_DragOver"
-                     KeyUp="List_uploadedItems_KeyUp"
-                     Height="120"
-                     BorderThickness="0">
+                    <ListBox x:Name="list_uploadedItems" Grid.Row="1"
+                             SelectionMode="Extended"
+                             AllowDrop="True"
+                             Drop="List_uploadedItems_Drop"
+                             DragOver="List_uploadedItems_DragOver"
+                             KeyUp="List_uploadedItems_KeyUp"
+                             BorderThickness="0">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal" ToolTip="{Binding FullPath}">
                                     <Image Source="{Binding Icon}" Width="16" Height="16" Margin="0,0,5,0"/>
                                     <TextBlock Text="{Binding DisplayName}" />
-                                    <TextBlock Text=" (文件夹)" Foreground="Blue" FontStyle="Italic" 
-                                       Visibility="{Binding IsFolder, Converter={StaticResource BoolToVisibilityConverter}}" 
-                                       Margin="5,0,0,0"/>
+                                    <TextBlock Text="{Binding FullPath}" Foreground="Blue" FontStyle="Italic" Margin="5,0,0,0"/>
                                 </StackPanel>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
@@ -66,13 +81,14 @@
         </GroupBox>
 
         <!-- 2. FTP 设置 -->
-        <GroupBox Grid.Row="1" Header="FTP 设置" FontWeight="Bold" Margin="0,0,0,10">
+        <GroupBox Grid.Row="1" Grid.Column="0"
+                  Header="FTP 设置" FontWeight="Bold" Margin="0,0,0,10">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="180"/>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="180"/>
                 </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -88,53 +104,118 @@
                 <TextBlock Text="远程路径：" Grid.Row="1" Grid.Column="0" Margin="5"/>
                 <TextBox x:Name="txt_remotePath" Grid.Row="1" Grid.Column="1" Text="/apps/" Margin="5" VerticalContentAlignment="Center"/>
 
-                <CheckBox x:Name="chk_rebootAfterDeploy" 
-                  Content="部署后重启设备" 
-                  Grid.Row="1" Grid.Column="2" 
-                  Grid.ColumnSpan="2"
-                  VerticalAlignment="Center" 
-                  Margin="10,5,5,5"
-                  IsChecked="False"/>
+                <CheckBox x:Name="chk_rebootAfterDeploy"
+                          Content="部署后重启设备"
+                          Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2"
+                          VerticalAlignment="Center" Margin="10,5,5,5"
+                          IsChecked="False"/>
             </Grid>
         </GroupBox>
 
         <!-- 3. IP 列表 -->
-        <GroupBox Grid.Row="2" Header="目标IP列表（每行一个）" FontWeight="Bold" Margin="0,0,0,10">
-            <TextBox x:Name="txt_ipList" 
-                     TextWrapping="NoWrap" 
-                     AcceptsReturn="True" 
+        <GroupBox Grid.Row="2" Grid.Column="0"
+                  Header="目标IP列表（每行一个）" FontWeight="Bold" Margin="0,0,0,10">
+            <TextBox x:Name="txt_ipList"
+                     TextWrapping="NoWrap"
+                     AcceptsReturn="True"
                      VerticalScrollBarVisibility="Auto"
-                     FontFamily="Consolas" 
+                     FontFamily="Consolas"
                      FontSize="12"
-                     Height="100"
-                     Text="192.168.1.122&#xA;192.168.1.123&#xA;192.168.1.124&#xA;192.168.1.126&#xA;192.168.1.127&#xA;192.168.1.128&#xA;" />
+                     MinHeight="80"
+                     Text="192.168.1.122&#xA;192.168.1.123&#xA;192.168.1.124&#xA;192.168.1.126&#xA;192.168.1.127&#xA;192.168.1.128&#xA;" TextChanged="Txt_ipList_TextChanged" />
         </GroupBox>
 
         <!-- 4. 操作按钮 -->
-        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,10">
-            <Button x:Name="Btn_deploy" Content="开始部署" Click="Btn_deploy_Click" 
+        <StackPanel Grid.Row="3" Grid.Column="0"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Left"
+                    Margin="0,0,0,10">
+            <Button x:Name="Btn_deploy" Content="开始部署"
+                    Click="Btn_deploy_Click"
                     Background="#FF4CAF50" Foreground="White" FontWeight="Bold"
                     Width="100" Height="30" Margin="0,0,10,0"/>
-            <Button x:Name="Btn_clearLog" Content="清除日志" Click="Btn_clear_Click" 
+            <Button x:Name="Btn_clearLog" Content="清除日志"
+                    Click="Btn_clear_Click"
                     Background="#FF9E9E9E" Foreground="White"
                     Width="100" Height="30"/>
         </StackPanel>
 
         <!-- 5. 日志输出 -->
-        <GroupBox Grid.Row="4" Header="日志输出" FontWeight="Bold">
-            <TextBox x:Name="txt_log" 
-             TextWrapping="Wrap" 
-             AcceptsReturn="True" 
-             IsReadOnly="True"
-             VerticalScrollBarVisibility="Auto"
-             FontFamily="Consolas" 
-             FontSize="11"
-             Background="Black" 
-             Foreground="#00FF00"
-             BorderBrush="#333"
-             Height="200"
-             VerticalAlignment="Top" />
+        <GroupBox Grid.Row="4" Grid.Column="0"
+                  Header="日志输出" FontWeight="Bold">
+            <TextBox x:Name="txt_log"
+                     TextWrapping="Wrap"
+                     AcceptsReturn="True"
+                     IsReadOnly="True"
+                     VerticalScrollBarVisibility="Auto"
+                     FontFamily="Consolas"
+                     FontSize="11"
+                     Background="Black"
+                     Foreground="#00FF00"
+                     BorderBrush="#333"
+                     MinHeight="150"
+                     VerticalAlignment="Top" Height="195" />
         </GroupBox>
 
+        <!-- ==================== 右侧：远端文件预览（缩小占比）==================== -->
+        <!-- 修改：远端预览区域，添加 ComboBox -->
+        <GroupBox Grid.Row="0" Grid.RowSpan="5" Grid.Column="1"
+          Header="远端预览" FontWeight="Bold"
+          Margin="10,0,0,0">
+            <Border Background="White" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- IP 选择下拉框 -->
+                    <ComboBox x:Name="cmb_targetIPs"
+                        Grid.Row="0"
+                        Margin="5"
+                        HorizontalAlignment="Left"
+                        Width="180"
+                        SelectedValuePath="."
+                        SelectionChanged="Cmb_targetIPs_SelectionChanged">
+                    </ComboBox>
+
+                    <!-- 刷新按钮 -->
+                    <Button Content="刷新"
+                    Grid.Row="1"
+                    Click="Btn_RefreshRemote_Click"
+                    Width="60" Height="22"
+                    HorizontalAlignment="Right"
+                    Margin="0,5,5,5"/>
+
+                    <!-- 文件树 -->
+                    <GroupBox  x:Name="group_remoteFiles"
+                               Grid.Row="2" 
+                                Margin="5" 
+                                Header="{Binding CurrentRemotePathHeader}" 
+                                BorderThickness="1">
+                        <TreeView x:Name="tree_remoteFiles"
+                            Margin="0"
+                            BorderThickness="0">
+
+                            <TreeView.ItemContainerStyle>
+                                <Style TargetType="TreeViewItem">
+                                    <Setter Property="IsExpanded" Value="True" />
+                                </Style>
+                            </TreeView.ItemContainerStyle>
+
+                            <TreeView.ItemTemplate>
+                                <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Source="{Binding Icon}" Width="16" Height="16" Margin="0,0,5,0"/>
+                                        <TextBlock Text="{Binding Name}" />
+                                    </StackPanel>
+                                </HierarchicalDataTemplate>
+                            </TreeView.ItemTemplate>
+                        </TreeView>
+                    </GroupBox>
+                </Grid>
+            </Border>
+        </GroupBox>
     </Grid>
 </Window>

@@ -10,6 +10,77 @@ namespace DeployMaster
 {
     class ConnectionManager
     {
+        public class FtpListItem
+        {
+            public string Name { get; set; }
+            public string FullName { get; set; }
+            public bool IsDirectory { get; set; }
+            public long Size { get; set; }
+            public DateTime ModifiedDate { get; set; }
+        };
+
+        /// <summary>
+        /// 简单解析 Unix 风格 FTP LIST 行
+        /// 示例: drwxr-xr-x 1 user group 0 May 10 12:34 folder
+        /// </summary>
+        public static FtpListItem ParseFtpListing(string line)
+        {
+            try
+            {
+                var parts = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+
+                if (parts.Length < 9) return null;
+
+                var item = new FtpListItem();
+                item.IsDirectory = parts[0].StartsWith("d");
+
+                // 从右边找时间/日期部分
+                int dateIndex = -1;
+                for (int i = parts.Length - 1; i >= 0; i--)
+                {
+                    if (DateTime.TryParse(parts[i], out _) ||
+                        (i > 0 && DateTime.TryParse(parts[i - 1] + " " + parts[i], out _)))
+                    {
+                        dateIndex = i;
+                        break;
+                    }
+                }
+
+                if (dateIndex < 3) return null;
+
+                // 大小在日期前
+                long.TryParse(parts[dateIndex - 1], out long size);
+                item.Size = size;
+
+                // 名称是最后部分（可能含空格）
+                string name = string.Join(" ", parts.Skip(dateIndex + 1));
+                if (string.IsNullOrEmpty(name)) name = parts[parts.Length - 1]; // 备用
+                item.Name = name;
+
+                // 尝试解析日期
+                string dateStr = string.Join(" ", parts.Skip(dateIndex - 1).Take(2));
+                if (!DateTime.TryParse(dateStr, out DateTime dt))
+                {
+                    // 尝试 MM dd HH:mm 或 MM dd yyyy
+                    if (parts.Length >= dateIndex + 2)
+                    {
+                        string month = parts[dateIndex - 2];
+                        string day = parts[dateIndex - 1];
+                        string timeOrYear = parts[dateIndex];
+                        dateStr = $"{month} {day} {timeOrYear}";
+                        DateTime.TryParse(dateStr, out dt);
+                    }
+                }
+                item.ModifiedDate = dt == default ? DateTime.Now : dt;
+
+                return item;
+            }
+            catch
+            {
+                // 解析失败，跳过
+                return null;
+            }
+        }
         public string connResponse;
         public List<FileObject> lines = new List<FileObject>();
 
@@ -306,6 +377,39 @@ namespace DeployMaster
             }
         }
 
+        /// <summary>
+        /// 列出 FTP 服务器上的目录内容
+        /// </summary>
+        /// <param name="uri">FTP 路径，如 ftp://192.168.1.100/apps/</param>
+        /// <param name="user">用户名</param>
+        /// <param name="pass">密码</param>
+        /// <returns>文件/目录列表</returns>
+        public static FtpListItem[] FtpList(string uri, string user, string pass)
+        {
+            var request = (FtpWebRequest)WebRequest.Create(uri);
+            request.Method = WebRequestMethods.Ftp.ListDirectoryDetails;
+            request.Credentials = new NetworkCredential(user, pass);
+            request.UseBinary = true;
+            request.EnableSsl = false; // 根据需要调整
+
+            using (var response = (FtpWebResponse)request.GetResponse())
+            using (var stream = response.GetResponseStream())
+            using (var reader = new StreamReader(stream, Encoding.UTF8))
+            {
+                var entries = new List<FtpListItem>();
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    var item = ParseFtpListing(line.Trim());
+                    if (item != null)
+                    {
+                        item.FullName = uri + item.Name;
+                        entries.Add(item);
+                    }
+                }
+                return entries.ToArray();
+            }
+        }
         public Uri ParseConnectionUrl(string url)
         {
             Console.WriteLine(url);
@@ -322,5 +426,7 @@ namespace DeployMaster
                 return new Uri(formattedUrl);
             }
         }
+
+
     }
 }
